@@ -1,0 +1,70 @@
+{
+  "version": 4,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "environment": {
+        "CCACHE_DIR": "${sourceDir}/build/.ccache",
+        "PIP_CACHE_DIR": "${sourceDir}/build/.pip-cache"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_STANDARD": "20",
+        "USERVER_BUILD_ALL_COMPONENTS": "OFF",
+        "USERVER_BUILD_TESTS": "OFF",
+        "USERVER_BUILD_SAMPLES": "OFF",
+        "USERVER_FEATURE_CORE": "ON",
+        "USERVER_FEATURE_CHAOTIC_OPENAPI": "OFF",
+        "USERVER_FEATURE_UTEST": "OFF",
+        "USERVER_FEATURE_TESTSUITE": "ON",
+        "USERVER_FEATURE_JEMALLOC": "OFF",
+        "USERVER_INSTALL": "OFF"
+      }
+    },
+    {
+      "name": "macos-debug",
+      "inherits": "debug",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "USERVER_CHECK_PACKAGE_VERSIONS": "OFF",
+        "USERVER_FEATURE_CRYPTOPP_BLAKE2": "OFF",
+        "USERVER_USE_STATIC_LIBS": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "targets": ["minimal-service"]
+    },
+    {
+      "name": "macos-debug",
+      "configurePreset": "macos-debug",
+      "targets": ["minimal-service"]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "output": {"outputOnFailure": true}
+    },
+    {
+      "name": "macos-debug",
+      "configurePreset": "macos-debug",
+      "output": {"outputOnFailure": true}
+    }
+  ]
+}
