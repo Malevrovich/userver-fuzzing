@@ -1,30 +1,60 @@
 # userver-fuzzing
 
-Минимальная основа проекта: userver из исходников и один сервис с функциональным
-тестом через testsuite. Постановка фаззинга — в [PROJECT.md](PROJECT.md), обзор
-инструментов — в [RESEARCH.md](RESEARCH.md).
+Стенд для знакомства с готовыми фаззерами и экспериментов с grey-box фаззингом
+userver. Постановка проекта — в [PROJECT.md](PROJECT.md), обзор инструментов —
+в [RESEARCH.md](RESEARCH.md).
 
-## Структура
+## Сервис из официального шаблона
 
-- `third_party/userver/` — git submodule официального репозитория, тег `v3.2`.
-- `services/minimal/` — сервис `minimal-service`, конфигурация и testsuite-тест.
-- `CMakeLists.txt` — общая сборка userver и сервисов через `add_subdirectory`.
-- `CMakePresets.json` — параметры сборки; локальные настройки можно задать
-  в игнорируемом `CMakeUserPresets.json`.
-- `build/` — бинарники, Python-окружения, кеши и результаты тестов, вне git.
+`services/simple-target-service/` создан штатным генератором userver `v3.2`:
 
-Сервис использует встроенный обработчик `GET /ping`: HTTP 200 с пустым телом.
-Компоненты `TestsuiteSupport` и `TestsControl` обеспечивают интеграцию с testsuite;
-`/tests/{action}` включается только при запуске через testsuite.
+```sh
+third_party/userver/scripts/userver-create-service services/simple-target-service
+```
 
-## Сборка и функциональный тест
+Команда приведена для воспроизведения: целевая папка не должна существовать.
+Выбран HTTP без БД. Прежний `services/minimal/` удалён.
+
+В шаблоне есть обработчик `GET,POST /hello?name=Tester` с ответом
+`Hello, Tester!\n`, проверка готовности `/ping`, C++ unit-тест, benchmark,
+функциональный тест через testsuite, конфиги, Makefile и Dev Container.
+Базовая ручка `/hello` оставлена из генератора. Добавлены ручные JSON-ручки
+с намеренными дефектами для фаззинга: [описание и воспроизведение](services/simple-target-service/README.md).
+Контракт — [OpenAPI 3.0.3](services/simple-target-service/openapi.yaml), серверный кодген не используется.
+В `CMakeLists.txt` путь в `download_userver(TRY_DIR ...)` указывает на
+`../../third_party/userver`. Штатный helper подключает этот checkout через
+`add_subdirectory` и завершает работу без скачивания userver.
+В корневых presets и presets сервиса задано
+`CMAKE_DISABLE_FIND_PACKAGE_userver=ON`, чтобы использовать исходники даже при
+наличии установленного userver. Корневой CMake проверяет наличие submodule.
+
+## Варианты генератора
+
+| Флаги | Результат |
+| --- | --- |
+| без флагов | HTTP-сервис с `/hello`, без БД; выбран для первого этапа |
+| `--postgresql` | HTTP и пример работы с PostgreSQL, схема, данные и тесты |
+| `--mongo` | HTTP и пример работы с MongoDB, настройки и тесты |
+| `--grpc` | Дополнительно gRPC-сервис, `.proto` и функциональный тест |
+
+Флаги можно сочетать, например `--grpc --postgresql`. Старые отдельные GitHub
+репозитории `service_template`, `pg_service_template`, `pg_grpc_service_template`
+и `mongo_grpc_service_template` в документации помечены как legacy:
+для нового проекта рекомендуется генератор.
+
+Основные локальные источники:
+
+- [Configure, Build and Install](third_party/userver/scripts/docs/en/userver/build/build.md) — создание и запуск шаблона;
+- [Writing your first HTTP server](third_party/userver/scripts/docs/en/userver/tutorial/hello_service.md) — устройство сервиса;
+- [Functional tests](third_party/userver/scripts/docs/en/userver/functional_testing.md) — testsuite;
+- [Supported platforms and templates](third_party/userver/scripts/docs/en/userver/supported_platforms.md) — статус старых шаблонов.
+
+## Сборка и тесты
 
 Нужны Git, CMake >= 3.24, Ninja, компилятор C++20, Python >= 3.10 и
-[зависимости userver для своей ОС](https://userver.tech/de/db9/md_en_2userver_2build_2dependencies.html).
-Testsuite устанавливается штатной CMake-интеграцией в виртуальные окружения
-внутри `build/`. Драйверы БД, gRPC, примеры и собственные тесты userver отключены.
+[зависимости userver](third_party/userver/scripts/docs/en/userver/build/dependencies.md).
 
-Базовый вариант для Linux (в том числе x86-64 серверов и виртуальных машин):
+Из корня репозитория на Linux:
 
 ```sh
 git submodule update --init --recursive
@@ -33,16 +63,7 @@ cmake --build --preset debug --parallel 6
 ctest --preset debug
 ```
 
-Число параллельных задач выбирай под доступные CPU и память. Архитектура
-определяется компилятором; проект не задаёт `-march=native` или конкретную ISA.
-
-macOS — отдельный вариант с пресетом `macos-debug`:
-
-Для Homebrew ICU выполни рекомендованную документацией userver команду
-`brew link --force icu4c` (на этой машине пакет называется `icu4c@78`).
-Также нужен `openssl@3`: userver `v3.2` не линкуется с установленным здесь
-OpenSSL 4. При первой конфигурации явно выбираем OpenSSL 3; CMake сохраняет
-этот выбор в локальном каталоге сборки.
+На macOS с Homebrew OpenSSL 3:
 
 ```sh
 git submodule update --init --recursive
@@ -51,56 +72,42 @@ cmake --build --preset macos-debug --parallel 6
 ctest --preset macos-debug
 ```
 
-Функциональный тест сам запускает настоящий процесс сервиса, обращается к
-`/ping` через HTTP и проверяет статус и тело ответа. Подробный вывод:
+Root presets собирают сервис, unit-тест и benchmark. Testsuite создаёт
+виртуальные окружения внутри `build/` и запускает настоящий процесс сервиса.
+Число параллельных задач выбирай под доступные CPU и память.
+
+Проверено 29 октября 2026 на macOS ARM64 с userver `v3.2`: сборка прошла,
+CTest — 3/3 (`simple_target_service_unittest`, `simple_target_service_benchmark`,
+`testsuite-simple_target_service`). Linux и самостоятельные Makefile-presets
+шаблона в этой проверке не запускались.
+
+Для запуска в окружении testsuite без остановки после теста:
 
 ```sh
-ctest --preset debug --verbose
-```
-
-Для ручного запуска из корня репозитория:
-
-```sh
-./build/debug/services/minimal/minimal-service --config services/minimal/configs/config.yaml
+cmake --build build/macos-debug --target start-simple_target_service
 ```
 
 В другом терминале:
 
 ```sh
-curl -i http://localhost:8080/ping
+curl 'http://127.0.0.1:8080/hello?name=userver'
 ```
 
-Для macOS в командах выше замени `debug` на `macos-debug`.
+Для Linux замени `macos-debug` на `debug`. Остановить сервис можно через Ctrl+C.
+
+Штатный самостоятельный flow из папки сервиса — `make build-debug`,
+`make test-debug`, `make start-debug`. Он использует собственные presets
+шаблона; профиль `debug` включает ASan/UBSan. Корневые presets предназначены
+для общей сборки стендов с нашим checkout userver. Сгенерированные файлы
+`.github/` внутри папки сервиса являются заготовками для отдельного репозитория
+и не запускают CI этого репозитория.
 
 ## Изменения userver
 
-Исходники в submodule можно редактировать и пересобирать вместе с сервисом.
-Перед коммитами создай рабочую ветку внутри `third_party/userver/`;
-исходный checkout закреплён на теге и находится в detached HEAD.
-Чтобы использовать свой форк, замени URL submodule и синхронизируй его через
-`git submodule sync`. После коммита в userver основной репозиторий фиксирует
-новую ссылку командой `git add third_party/userver`.
+`third_party/userver/` — submodule официального репозитория на теге `v3.2`,
+коммит `19472cc41deda3fb1c7aa7d13d53235a0161a224`.
+Перед изменениями создай ветку внутри submodule. Для отправки своих изменений
+можно заменить remote на свой форк; основной репозиторий фиксирует коммит
+userver вместе с версией стенда.
 
-Для сборки с другим checkout или worktree:
-
-```sh
-cmake --preset debug -DUSERVER_SOURCE_DIR=/absolute/path/to/userver
-```
-
-Разные варианты userver лучше собирать в отдельных каталогах, например
-с дополнительным `-B build/userver-experiment`.
-
-## Документация userver
-
-- [Настройка и сборка](https://userver.tech/de/dab/md_en_2userver_2build_2build.html).
-- [Минимальный HTTP-сервис](https://userver.tech/da/d16/md_en_2userver_2tutorial_2hello__service.html).
-- [Функциональные тесты](https://userver.tech/df/d07/md_en_2userver_2functional__testing.html).
-- [Опции сборки](https://userver.tech/d5/d3d/md_en_2userver_2build_2options.html).
-
-## Проверенный запуск
-
-Сборка и функциональный тест выполнены на macOS ARM64 с AppleClang 21,
-Python 3.14.6, OpenSSL 3.6.3 и yandex-taxi-testsuite 0.4.11.
-Userver закреплён на коммите `19472cc41deda3fb1c7aa7d13d53235a0161a224` (`v3.2`).
-Результат: `test_ping PASSED`, CTest — 1/1.
-Linux/x86-64 пока не проверен; специфичных для ARM настроек в проекте нет.
+Разные версии и профили инструментации лучше собирать в отдельных каталогах.

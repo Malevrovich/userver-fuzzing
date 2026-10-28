@@ -1,0 +1,246 @@
+openapi: 3.0.3
+info:
+  title: Simple Target Service
+  version: 1.0.0
+  description: >-
+    A small HTTP target for fuzzing experiments. All state is process-local.
+    The contract describes intended behavior; process termination and HTTP 500
+    are defects, not successful outcomes. Restarting the process resets all state.
+servers:
+  - url: http://127.0.0.1:8080
+paths:
+  /ping:
+    get:
+      operationId: ping
+      summary: Check readiness
+      responses:
+        '200':
+          description: Ready; empty response body
+  /hello:
+    parameters:
+      - name: name
+        in: query
+        schema:
+          type: string
+    get:
+      operationId: getHello
+      responses:
+        '200':
+          description: Greeting
+          content:
+            text/plain:
+              schema:
+                type: string
+    post:
+      operationId: postHello
+      responses:
+        '200':
+          description: Greeting
+          content:
+            text/plain:
+              schema:
+                type: string
+  /stateless/crash:
+    post:
+      operationId: sumNumbers
+      summary: Add two numbers without retaining state
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Numbers'
+      responses:
+        '200':
+          description: Sum of x and y
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [sum]
+                properties:
+                  sum:
+                    type: integer
+                    minimum: 0
+                    maximum: 200
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /stateless/error:
+    post:
+      operationId: processValue
+      summary: Process a number in the selected mode without retaining state
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModeValue'
+      responses:
+        '200':
+          description: Processed value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Value'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /stateful/sequence:
+    post:
+      operationId: runSequence
+      summary: Apply a command to the process-local state machine
+      description: >-
+        begin starts a new sequence; advance moves begun to advanced and resets
+        other stages to idle; finish and reset return to idle. Invalid input does
+        not change the stage. This state is independent of the shared ticket state.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Command'
+      responses:
+        '200':
+          description: Current stage
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [stage]
+                properties:
+                  stage:
+                    type: string
+                    enum: [idle, begun, advanced]
+          links:
+            NextCommand:
+              operationId: runSequence
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /shared/prepare:
+    post:
+      operationId: prepareValue
+      summary: Prepare a value and issue a new ticket
+      description: >-
+        Replaces the previously prepared value and invalidates the old ticket,
+        including its committed status. Only the latest ticket is active.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Value'
+      responses:
+        '200':
+          description: Ticket for committing the prepared value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+          links:
+            CommitPreparedValue:
+              operationId: commitValue
+              requestBody:
+                ticket: '$response.body#/ticket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /shared/commit:
+    post:
+      operationId: commitValue
+      summary: Commit the value associated with a ticket
+      description: >-
+        Committing the current ticket is intended to be idempotent: retries
+        return the same value. An unknown or expired ticket returns 409 and
+        does not change state. Preparing another value invalidates this ticket.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Ticket'
+      responses:
+        '200':
+          description: Committed value
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [ticket, value]
+                properties:
+                  ticket:
+                    $ref: '#/components/schemas/TicketId'
+                  value:
+                    $ref: '#/components/schemas/SmallNumber'
+          links:
+            RetryCommit:
+              operationId: commitValue
+              requestBody:
+                ticket: '$response.body#/ticket'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Unknown or expired ticket; no state change
+          content:
+            application/json:
+              schema:
+                type: object
+components:
+  responses:
+    BadRequest:
+      description: Malformed JSON or fields outside the request schema; no state change
+      content:
+        application/json:
+          schema:
+            type: object
+  schemas:
+    SmallNumber:
+      type: integer
+      minimum: 0
+      maximum: 100
+    Numbers:
+      type: object
+      additionalProperties: false
+      required: [x, y]
+      properties:
+        x:
+          $ref: '#/components/schemas/SmallNumber'
+        y:
+          $ref: '#/components/schemas/SmallNumber'
+    ModeValue:
+      type: object
+      additionalProperties: false
+      required: [mode, value]
+      properties:
+        mode:
+          type: string
+          enum: [safe, fast]
+        value:
+          $ref: '#/components/schemas/SmallNumber'
+    Value:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties:
+        value:
+          $ref: '#/components/schemas/SmallNumber'
+    Command:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [begin, advance, finish, reset]
+    TicketId:
+      type: string
+      minLength: 1
+      maxLength: 20
+      pattern: '^[0-9]{1,20}$'
+    Ticket:
+      type: object
+      additionalProperties: false
+      required: [ticket]
+      properties:
+        ticket:
+          $ref: '#/components/schemas/TicketId'
