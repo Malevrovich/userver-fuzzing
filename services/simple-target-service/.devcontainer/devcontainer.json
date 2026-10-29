@@ -1,6 +1,6 @@
 {
   "containerEnv": {
-    "CCACHE_DIR": "/home/user/simple_target_service/.ccache",
+    "CCACHE_DIR": "/workspaces/userver-fuzzing/services/simple-target-service/.ccache",
     "CORES_DIR": "/cores",
     "PREFIX": "${PREFIX:-~/.local}",
     "SHELL": "/bin/bash"
@@ -35,13 +35,13 @@
   ],
   "image": "ghcr.io/userver-framework/ubuntu-22.04-userver-pg-dev:v3.2",
   "mounts": [],
-  "onCreateCommand": "sudo git config --global --add safe.directory /home/user/simple_target_service",
+  "onCreateCommand": "sudo git config --global --add safe.directory /workspaces/userver-fuzzing/services/simple-target-service",
   "remoteUser": "user",
   "runArgs": [
     "--cap-add=SYS_PTRACE",
     "--security-opt",
     "seccomp=unconfined"
   ],
-  "workspaceFolder": "/home/user/simple_target_service",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/home/user/simple_target_service,type=bind"
+  "workspaceFolder": "/workspaces/userver-fuzzing/services/simple-target-service",
+  "workspaceMount": "source=${localWorkspaceFolder}/../..,target=/workspaces/userver-fuzzing,type=bind"
 }
