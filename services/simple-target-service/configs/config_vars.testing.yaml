@@ -5,3 +5,5 @@ logger-level: debug
 is-testing: true
 
 server-port: 8080
+
+dependency-url: http://127.0.0.1:8081/decision

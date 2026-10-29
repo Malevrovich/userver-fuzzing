@@ -11,6 +11,7 @@
 #include <userver/utils/daemon_run.hpp>
 
 #include <hello.hpp>
+#include "dependency.hpp"
 #include "sequence.hpp"
 #include "shared.hpp"
 #include "stateless.hpp"
@@ -27,6 +28,7 @@ int main(int argc, char* argv[]) {
           .Append<simple_target_service::Hello>()
           .Append<simple_target_service::StatelessCrash>()
           .Append<simple_target_service::StatelessError>()
+          .Append<simple_target_service::DependencyCrash>()
           .Append<simple_target_service::Sequence>()
           .Append<simple_target_service::SharedState>()
           .Append<simple_target_service::Prepare>()

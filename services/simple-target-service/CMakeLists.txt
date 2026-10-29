@@ -24,6 +24,7 @@ add_library(
     src/greeting.cpp #
     src/hello.cpp #
     src/stateless.cpp
+    src/dependency.cpp
     src/sequence.cpp
     src/shared.cpp
 )

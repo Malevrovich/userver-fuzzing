@@ -1,0 +1,66 @@
+openapi: 3.0.3
+info:
+  title: Decision Dependency
+  version: 1.0.0
+  description: >-
+    External HTTP dependency used by Simple Target Service. Each request is
+    independent. A mock or stub chooses the decision; neither decision is an
+    error. Non-200 statuses, invalid JSON, and timeouts are fault-injection
+    scenarios outside this normal-response contract.
+servers:
+  - url: http://127.0.0.1:8081
+paths:
+  /decision:
+    post:
+      operationId: decide
+      summary: Return a processing decision for a mode and value
+      description: >-
+        Accepts the JSON forwarded by POST /dependency/crash. Returns exactly
+        one field, decision, with value accept or retry. No state is retained.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModeValue'
+            example:
+              mode: safe
+              value: 10
+      responses:
+        '200':
+          description: Decision for the request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Decision'
+              examples:
+                accepted:
+                  value:
+                    decision: accept
+                retry:
+                  value:
+                    decision: retry
+components:
+  schemas:
+    SmallNumber:
+      type: integer
+      minimum: 0
+      maximum: 100
+    ModeValue:
+      type: object
+      additionalProperties: false
+      required: [mode, value]
+      properties:
+        mode:
+          type: string
+          enum: [safe, fast]
+        value:
+          $ref: '#/components/schemas/SmallNumber'
+    Decision:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [accept, retry]

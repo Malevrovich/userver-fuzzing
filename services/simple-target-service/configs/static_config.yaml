@@ -69,6 +69,12 @@ components_manager:
             method: POST
             task_processor: main-task-processor
 
+        handler-dependency-crash:
+            path: /dependency/crash
+            method: POST
+            task_processor: main-task-processor
+            dependency-url: $dependency-url
+
         handler-sequence:
             path: /stateful/sequence
             method: POST

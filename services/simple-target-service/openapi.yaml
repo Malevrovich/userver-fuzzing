@@ -85,6 +85,44 @@ paths:
                 $ref: '#/components/schemas/Value'
         '400':
           $ref: '#/components/responses/BadRequest'
+  /dependency/crash:
+    post:
+      operationId: processWithDependency
+      summary: Process a value using an external HTTP decision
+      description: >-
+        Forwards the validated request as JSON to the configured decision URL.
+        The dependency must return HTTP 200 and exactly one JSON field,
+        decision, with value accept or retry. There is one attempt with a
+        500 ms timeout and no redirects. No state is retained between calls.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModeValue'
+      responses:
+        '200':
+          description: The input value and the external decision
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [value, decision]
+                properties:
+                  value:
+                    $ref: '#/components/schemas/SmallNumber'
+                  decision:
+                    type: string
+                    enum: [accept, retry]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '502':
+          description: Dependency unavailable, timed out, non-200, or invalid JSON response
+          content:
+            application/json:
+              schema:
+                type: object
   /stateful/sequence:
     post:
       operationId: runSequence

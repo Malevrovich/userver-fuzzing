@@ -43,6 +43,7 @@ download_userver(TRY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/userver"
 | Без состояния, HTTP 500 | `/stateless/error` | `{"mode":"fast","value":13}`; обычное C++-исключение, процесс продолжает работать |
 | Одна ручка с состоянием | `/stateful/sequence` | Три запроса: `begin` → `advance` → `finish` в поле `action` |
 | Две ручки с общим состоянием | `/shared/prepare`, `/shared/commit` | Подготовить `value=42`, затем дважды закоммитить полученный `ticket` |
+| Запрос и ответ внешней зависимости | `/dependency/crash` | `{"mode":"fast","value":13}` и HTTP 200 с `{"decision":"retry"}` от зависимости |
 
 Падения реализованы явным `std::abort()` и воспроизводятся в Debug и Release.
 Это контрольные дефекты, а не неопределённое поведение или случайные сбои.
@@ -83,6 +84,74 @@ curl -X POST localhost:8080/stateless/error -H 'Content-Type: application/json' 
 перезапуск или `reset`/новый `prepare`. При конкурентном запуске порядок
 определяется захватом mutex; точные цепочки выше воспроизводи последовательно.
 
+## Внешняя зависимость
+
+Отдельный контракт сервиса зависимости — [dependency-openapi.yaml](dependency-openapi.yaml),
+OpenAPI 3.0.3: `POST /decision` на порту 8081. Схема самодостаточна, без ссылок
+на другие файлы: её можно отдельно передавать инструментам генерации моков.
+Вход — `{"mode":"safe","value":10}`, нормальный ответ —
+`{"decision":"accept"}` или `{"decision":"retry"}`. Ограничения входа
+согласованы со схемой основного сервиса и проверяются тестом.
+Ошибочные ответы и задержки mockserver используются отдельно для fault injection.
+
+`POST /dependency/crash` принимает те же поля `mode` (`safe` или `fast`)
+и `value` (целое от 0 до 100), что `/stateless/error`. После валидации он
+делает настоящий HTTP POST с тем же JSON на адрес из config var `dependency-url`.
+По умолчанию это `http://127.0.0.1:8081/decision`; адрес не берётся из запроса.
+
+Зависимость должна вернуть HTTP 200 и JSON ровно с одним полем:
+`{"decision":"accept"}` или `{"decision":"retry"}`. Обычный ответ ручки —
+`{"value":13,"decision":"accept"}`. Процесс падает только при совместном
+выполнении трёх условий: `mode=fast`, `value=13`, ответ зависимости — `retry`.
+Для `safe`, другого числа или решения `accept` ручка возвращает 200.
+
+Сетевой сбой, таймаут, статус зависимости не 200, невалидный JSON или другая
+структура ответа дают 502. Одна попытка, таймаут 500 мс, редиректы выключены.
+Невалидный вход даёт 400 без вызова зависимости. Ручка не хранит состояние
+и не кэширует ответы зависимости.
+
+Для ручного воспроизведения можно запустить простую зависимость в отдельном
+терминале (замени `retry` на `accept`, чтобы выключить условие падения):
+
+```sh
+python3 - <<'PY'
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+class Decision(BaseHTTPRequestHandler):
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get('Content-Length', '0')))
+        body = b'{"decision":"retry"}'
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+HTTPServer(('127.0.0.1', 8081), Decision).serve_forever()
+PY
+```
+
+Затем из корня репозитория запусти сервис с обычными config vars:
+
+```sh
+./build/macos-debug/services/simple-target-service/simple_target_service \
+  --config services/simple-target-service/configs/static_config.yaml \
+  --config_vars services/simple-target-service/configs/config_vars.yaml
+```
+
+Запрос из третьего терминала воспроизведёт падение:
+
+```sh
+curl -X POST localhost:8080/dependency/crash \
+  -H 'Content-Type: application/json' -d '{"mode":"fast","value":13}'
+```
+
+В testsuite URL подменяется на mockserver через штатный config hook.
+Ответ зависимости можно менять фикстурой `decision_dependency`. Тестовый
+config hook сохраняет timeout 500 мс вместо стандартных 10 секунд testsuite.
+Отдельный crash-тест сначала проверяет три безопасных сочетания, затем
+подтверждает `SIGABRT` при нужном запросе и ответе зависимости.
+
 ## Сборка и запуск
 
 Команды общей сборки из корня репозитория и особенности macOS приведены
@@ -104,7 +173,8 @@ make start-debug
 
 Unit-тест и benchmark проверяют функцию приветствия. Testsuite проверяет
 обычные ответы, 400/409, намеренный 500, сброс и независимость состояния,
-валидность OpenAPI и соответствие ответов схемам. Три crash-теста запускают
+валидность OpenAPI и соответствие ответов схемам, реальные вызовы mockserver
+и ошибки внешней зависимости. Четыре crash-теста запускают
 изолированные процессы и проверяют именно `SIGABRT` на допустимых по OpenAPI
 входах; core dumps в этих дочерних процессах отключены.
 Фаззеры пока не подключены.
