@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package fuzzing.target;
+
+// Unary equivalents of the REST fuzzing targets. Invalid application fields
+// return INVALID_ARGUMENT. Process termination and INTERNAL are injected defects.
+service TargetService {
+  rpc StatelessCrash(Numbers) returns (Sum);
+  rpc StatelessError(ModeValue) returns (Value);
+  rpc Sequence(Command) returns (Stage);
+  rpc Prepare(Value) returns (Ticket);
+  rpc Commit(Ticket) returns (CommittedValue);
+  rpc DependencyCrash(ModeValue) returns (ProcessedValue);
+}
+
+// External dependency. Both decisions are normal successful responses.
+service DecisionService {
+  rpc Decide(ModeValue) returns (Decision);
+}
+
+enum Mode {
+  MODE_UNSPECIFIED = 0;
+  MODE_SAFE = 1;
+  MODE_FAST = 2;
+}
+
+message Numbers {
+  optional int32 x = 1; // Required, [0, 100].
+  optional int32 y = 2; // Required, [0, 100].
+}
+message Sum { int32 sum = 1; }
+message ModeValue {
+  optional Mode mode = 1; // Required, SAFE or FAST.
+  optional int32 value = 2; // Required, [0, 100].
+}
+message Value { optional int32 value = 1; } // Required, [0, 100].
+
+enum Action {
+  ACTION_UNSPECIFIED = 0;
+  ACTION_BEGIN = 1;
+  ACTION_ADVANCE = 2;
+  ACTION_FINISH = 3;
+  ACTION_RESET = 4;
+}
+message Command { optional Action action = 1; }
+message Stage {
+  enum Kind {
+    IDLE = 0;
+    BEGUN = 1;
+    ADVANCED = 2;
+  }
+  Kind stage = 1;
+}
+message Ticket { optional string ticket = 1; } // Required, 1 to 20 ASCII digits.
+message CommittedValue {
+  string ticket = 1;
+  int32 value = 2;
+}
+enum DecisionKind {
+  DECISION_UNSPECIFIED = 0;
+  DECISION_ACCEPT = 1;
+  DECISION_RETRY = 2;
+}
+message Decision { optional DecisionKind decision = 1; }
+message ProcessedValue {
+  int32 value = 1;
+  DecisionKind decision = 2;
+}

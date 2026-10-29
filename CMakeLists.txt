@@ -8,3 +8,4 @@ endif()
 
 enable_testing()
 add_subdirectory(services/simple-target-service)
+add_subdirectory(services/simple-grpc-target-service)

@@ -1,113 +1,80 @@
 # userver-fuzzing
 
-Стенд для знакомства с готовыми фаззерами и экспериментов с grey-box фаззингом
-userver. Постановка проекта — в [PROJECT.md](PROJECT.md), обзор инструментов —
-в [RESEARCH.md](RESEARCH.md).
+Проект по grey-box фаззингу REST- и gRPC-сервисов на C++-фреймворке
+[userver](https://userver.tech/). Цель — дать разработчику удобный Python-интерфейс
+в testsuite для поиска ошибок с обратной связью от работающего сервиса.
 
-## Сервис из официального шаблона
+Сейчас подготовлены тестовые стенды с известными дефектами. Ближайший этап —
+прогнать на них существующие фаззеры, сравнить возможности и ограничения,
+а затем определить архитектуру собственного инструмента.
 
-`services/simple-target-service/` создан штатным генератором userver `v3.2`:
+## Что уже есть
 
-```sh
-third_party/userver/scripts/userver-create-service services/simple-target-service
-```
+| Стенд | API по умолчанию | Контракт |
+| --- | --- | --- |
+| [REST](services/simple-target-service/README.md) | HTTP, порт 8080 | [OpenAPI](services/simple-target-service/openapi.yaml) |
+| [gRPC](services/simple-grpc-target-service/README.md) | Unary gRPC, порт 8083 | [Protobuf](services/simple-grpc-target-service/proto/fuzzing/targets.proto) |
 
-Команда приведена для воспроизведения: целевая папка не должна существовать.
-Выбран HTTP без БД. Прежний `services/minimal/` удалён.
+Оба стенда содержат одни и те же сценарии:
 
-В шаблоне есть обработчик `GET,POST /hello?name=Tester` с ответом
-`Hello, Tester!\n`, проверка готовности `/ping`, C++ unit-тест, benchmark,
-функциональный тест через testsuite, конфиги, Makefile и Dev Container.
-Базовая ручка `/hello` оставлена из генератора. Добавлены ручные JSON-ручки
-с намеренными дефектами для фаззинга: [описание и воспроизведение](services/simple-target-service/README.md).
-Контракт — [OpenAPI 3.0.3](services/simple-target-service/openapi.yaml), серверный кодген не используется.
-В `CMakeLists.txt` путь в `download_userver(TRY_DIR ...)` указывает на
-`../../third_party/userver`. Штатный helper подключает этот checkout через
-`add_subdirectory` и завершает работу без скачивания userver.
-В корневых presets и presets сервиса задано
-`CMAKE_DISABLE_FIND_PACKAGE_userver=ON`, чтобы использовать исходники даже при
-наличии установленного userver. Корневой CMake проверяет наличие submodule.
+- падение процесса на определённом запросе без состояния;
+- HTTP 500 или gRPC `INTERNAL` при живом процессе;
+- падение после последовательности вызовов одной операции;
+- падение после цепочки двух операций с общим состоянием;
+- падение при сочетании запроса и ответа внешней зависимости.
 
-## Варианты генератора
-
-| Флаги | Результат |
-| --- | --- |
-| без флагов | HTTP-сервис с `/hello`, без БД; выбран для первого этапа |
-| `--postgresql` | HTTP и пример работы с PostgreSQL, схема, данные и тесты |
-| `--mongo` | HTTP и пример работы с MongoDB, настройки и тесты |
-| `--grpc` | Дополнительно gRPC-сервис, `.proto` и функциональный тест |
-
-Флаги можно сочетать, например `--grpc --postgresql`. Старые отдельные GitHub
-репозитории `service_template`, `pg_service_template`, `pg_grpc_service_template`
-и `mongo_grpc_service_template` в документации помечены как legacy:
-для нового проекта рекомендуется генератор.
-
-Основные локальные источники:
-
-- [Configure, Build and Install](third_party/userver/scripts/docs/en/userver/build/build.md) — создание и запуск шаблона;
-- [Writing your first HTTP server](third_party/userver/scripts/docs/en/userver/tutorial/hello_service.md) — устройство сервиса;
-- [Functional tests](third_party/userver/scripts/docs/en/userver/functional_testing.md) — testsuite;
-- [Supported platforms and templates](third_party/userver/scripts/docs/en/userver/supported_platforms.md) — статус старых шаблонов.
+Есть функциональные тесты через testsuite, моки зависимостей и проверки
+воспроизведения сбоев. Падения проверяются в отдельных процессах по `SIGABRT`.
+Контрольные входы, команды запуска и примеры зависимостей описаны в README
+каждого стенда. Прогоны фаззеров и измерения пока не выполнены.
 
 ## Сборка и тесты
 
-Нужны Git, CMake >= 3.24, Ninja, компилятор C++20, Python >= 3.10 и
-[зависимости userver](third_party/userver/scripts/docs/en/userver/build/dependencies.md).
+Нужны Git, CMake >= 3.24, Ninja, компилятор C++20, Python и
+[зависимости userver для своей ОС](third_party/userver/scripts/docs/en/userver/build/dependencies.md).
+Userver v3.2 находится в submodule `third_party/userver` и собирается из
+исходников вместе со стендами.
 
-Из корня репозитория на Linux:
+Перед первой сборкой:
 
 ```sh
 git submodule update --init --recursive
+```
+
+На Linux:
+
+```sh
 cmake --preset debug
 cmake --build --preset debug --parallel 6
 ctest --preset debug
 ```
 
-На macOS с Homebrew OpenSSL 3:
+На macOS нужны Python 3.11 и OpenSSL 3:
 
 ```sh
-git submodule update --init --recursive
-cmake --preset macos-debug -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)"
-cmake --build --preset macos-debug --parallel 6
-ctest --preset macos-debug
+cmake --preset macos-grpc-debug -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)"
+cmake --build --preset macos-grpc-debug --parallel 6
+ctest --preset macos-grpc-debug
 ```
 
-Root presets собирают сервис, unit-тест и benchmark. Testsuite создаёт
-виртуальные окружения внутри `build/` и запускает настоящий процесс сервиса.
-Число параллельных задач выбирай под доступные CPU и память.
+Профиль ожидает `python3.11` в PATH. Другой путь можно передать при конфигурации
+через `-DUSERVER_PYTHON_PATH=/path/to/python3.11`. Подробности macOS-сборки
+и запуск через Dev Container — в [инструкции gRPC-стенда](services/simple-grpc-target-service/README.md).
 
-Проверено 29 октября 2026 на macOS ARM64 с userver `v3.2`: сборка прошла,
-CTest — 3/3 (`simple_target_service_unittest`, `simple_target_service_benchmark`,
-`testsuite-simple_target_service`). Linux и самостоятельные Makefile-presets
-шаблона в этой проверке не запускались.
+Корневые presets собирают оба сервиса, их unit-тесты и benchmarks, а CTest
+запускает все проверки. Число параллельных задач выбирай под ресурсы машины.
+Артефакты сборки и Python-окружения находятся в `build/`.
 
-Для запуска в окружении testsuite без остановки после теста:
+Проверено на macOS ARM64: CTest — 6/6, функциональные проверки — 60 REST и
+40 gRPC. Полный Linux-прогон пока не выполнен.
 
-```sh
-cmake --build build/macos-debug --target start-simple_target_service
-```
+## Ближайшие планы
 
-В другом терминале:
+1. Подключить готовые REST- и gRPC-фаззеры и проверить обнаружение известных
+   сбоев, включая цепочки запросов.
+2. Организовать воспроизводимые эксперименты: одинаковые бюджеты, сброс
+   состояния, сохранение и повторение найденных примеров.
+3. Проверить сбор покрытия C++ и интеграцию с testsuite; по результатам
+   выбрать основу собственного grey-box инструмента.
 
-```sh
-curl 'http://127.0.0.1:8080/hello?name=userver'
-```
-
-Для Linux замени `macos-debug` на `debug`. Остановить сервис можно через Ctrl+C.
-
-Штатный самостоятельный flow из папки сервиса — `make build-debug`,
-`make test-debug`, `make start-debug`. Он использует собственные presets
-шаблона; профиль `debug` включает ASan/UBSan. Корневые presets предназначены
-для общей сборки стендов с нашим checkout userver. Сгенерированные файлы
-`.github/` внутри папки сервиса являются заготовками для отдельного репозитория
-и не запускают CI этого репозитория.
-
-## Изменения userver
-
-`third_party/userver/` — submodule официального репозитория на теге `v3.2`,
-коммит `19472cc41deda3fb1c7aa7d13d53235a0161a224`.
-Перед изменениями создай ветку внутри submodule. Для отправки своих изменений
-можно заменить remote на свой форк; основной репозиторий фиксирует коммит
-userver вместе с версией стенда.
-
-Разные версии и профили инструментации лучше собирать в отдельных каталогах.
+Подробная постановка и исследовательские вопросы — в [PROJECT.md](PROJECT.md).

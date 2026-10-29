@@ -22,6 +22,7 @@
         "USERVER_BUILD_TESTS": "OFF",
         "USERVER_BUILD_SAMPLES": "OFF",
         "USERVER_FEATURE_CORE": "ON",
+        "USERVER_FEATURE_GRPC": "ON",
         "USERVER_FEATURE_CHAOTIC_OPENAPI": "OFF",
         "USERVER_FEATURE_UTEST": "ON",
         "USERVER_FEATURE_TESTSUITE": "ON",
@@ -40,7 +41,18 @@
       "cacheVariables": {
         "USERVER_CHECK_PACKAGE_VERSIONS": "OFF",
         "USERVER_FEATURE_CRYPTOPP_BLAKE2": "OFF",
-        "USERVER_USE_STATIC_LIBS": "OFF"
+        "USERVER_USE_STATIC_LIBS": "OFF",
+        "USERVER_FORCE_DOWNLOAD_GRPC": "ON",
+        "USERVER_FORCE_DOWNLOAD_PROTOBUF": "ON",
+        "USERVER_FORCE_DOWNLOAD_ABSEIL": "ON",
+        "USERVER_FORCE_DOWNLOAD_RE2": "ON"
+      }
+    },
+    {
+      "name": "macos-grpc-debug",
+      "inherits": "macos-debug",
+      "cacheVariables": {
+        "USERVER_PYTHON_PATH": "python3.11"
       }
     }
   ],
@@ -48,24 +60,61 @@
     {
       "name": "debug",
       "configurePreset": "debug",
-      "targets": ["simple_target_service", "simple_target_service_unittest", "simple_target_service_benchmark"]
+      "targets": [
+        "simple_target_service",
+        "simple_target_service_unittest",
+        "simple_target_service_benchmark",
+        "simple_grpc_target_service",
+        "simple_grpc_target_service_unittest",
+        "simple_grpc_target_service_benchmark"
+      ]
     },
     {
       "name": "macos-debug",
       "configurePreset": "macos-debug",
-      "targets": ["simple_target_service", "simple_target_service_unittest", "simple_target_service_benchmark"]
+      "targets": [
+        "simple_target_service",
+        "simple_target_service_unittest",
+        "simple_target_service_benchmark",
+        "simple_grpc_target_service",
+        "simple_grpc_target_service_unittest",
+        "simple_grpc_target_service_benchmark"
+      ]
+    },
+    {
+      "name": "macos-grpc-debug",
+      "configurePreset": "macos-grpc-debug",
+      "targets": [
+        "simple_target_service",
+        "simple_target_service_unittest",
+        "simple_target_service_benchmark",
+        "simple_grpc_target_service",
+        "simple_grpc_target_service_unittest",
+        "simple_grpc_target_service_benchmark"
+      ]
     }
   ],
   "testPresets": [
     {
       "name": "debug",
       "configurePreset": "debug",
-      "output": {"outputOnFailure": true}
+      "output": {
+        "outputOnFailure": true
+      }
     },
     {
       "name": "macos-debug",
       "configurePreset": "macos-debug",
-      "output": {"outputOnFailure": true}
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "macos-grpc-debug",
+      "configurePreset": "macos-grpc-debug",
+      "output": {
+        "outputOnFailure": true
+      }
     }
   ]
 }
